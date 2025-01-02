@@ -19,15 +19,20 @@ diagnostics_file = "Data_ECG/Diagnostics.csv"
 ecg_data_folder = "Data_ECG/ECGData/ECGData"
 
 # 1. Load Diagnostics.csv
-# Handle potential issues with delimiters and encoding
 diagnostics_data = pd.read_csv(diagnostics_file, encoding='utf-8')
-diagnostics_data = diagnostics_data[~diagnostics_data['Rhythm'].isin(['SAAWR', 'AVRT', 'AVNRT', 'AT', 'SA', 'AF'])].reset_index(drop=True)
+diagnostics_data = diagnostics_data[~diagnostics_data['Rhythm'].isin(['SAAWR', 'AVRT', 'AVNRT', 'AT', 'SA', 'AF', 'SVT'])].reset_index(drop=True)
+
+# Giảm số lượng SB xuống 1800 cái đầu
+diagnostics_data_sb = diagnostics_data[diagnostics_data['Rhythm'] == 'SB']
+diagnostics_data_non_sb = diagnostics_data[diagnostics_data['Rhythm'] != 'SB']
+if len(diagnostics_data_sb) > 1800:
+    diagnostics_data_sb = diagnostics_data_sb.iloc[:1800]
+diagnostics_data = pd.concat([diagnostics_data_sb, diagnostics_data_non_sb]).reset_index(drop=True)
 
 # Extract features from Diagnostics.csv
 metadata_features = diagnostics_data.drop(columns=['FileName', 'Rhythm'])
 label_column = diagnostics_data['Rhythm']
 
-# Encode categorical features (e.g., Gender)
 metadata_encoded = pd.get_dummies(metadata_features, columns=['Gender'], drop_first=True)
 
 # Process Beat column
@@ -41,7 +46,6 @@ beat_columns = mlb.classes_
 
 # Filter numeric columns for scaling
 numeric_columns = metadata_encoded.select_dtypes(include=[np.number])
-print("Các cột số:", numeric_columns.columns)
 
 # Scale numerical features
 scaler = StandardScaler()
@@ -49,7 +53,6 @@ metadata_scaled_numeric = scaler.fit_transform(numeric_columns)
 
 # Combine metadata and beat data
 metadata_scaled = np.hstack([metadata_scaled_numeric, beat_encoded])
-print("Shape of combined metadata:", metadata_scaled.shape)
 
 # Encode labels
 label_encoder = LabelEncoder()
@@ -89,9 +92,9 @@ print("Loading complete!")
 max_length = max(len(signal) for signal in ecgs)
 ecgs_padded = pad_sequences(ecgs, maxlen=max_length, padding='post', dtype='float32')
 print(2)
-X_ecg = ecgs_padded  # Use the padded ECG data
-X_metadata = np.array(metadata_list) # Convert metadata_list to a NumPy array
-y = labels_one_hot  # Use one-hot encoded labels
+X_ecg = ecgs_padded
+X_metadata = np.array(metadata_list)
+y = labels_one_hot
 
 min_samples = min(len(X_ecg), len(X_metadata), len(y))
 X_ecg = X_ecg[:min_samples]
@@ -147,7 +150,7 @@ lr_reduction = ReduceLROnPlateau(monitor='val_loss', patience=3, factor=0.5, ver
 history = model.fit(
     [X_ecg_train, X_metadata_train], y_train,
     validation_data=([X_ecg_test, X_metadata_test], y_test),
-    epochs=5, batch_size=64,
+    epochs=20, batch_size=64,
     callbacks=[early_stopping, lr_reduction]
 )
 
